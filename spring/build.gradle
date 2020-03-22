@@ -1,0 +1,25 @@
+plugins {
+    id 'java'
+}
+
+group 'com.amairovi'
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile("org.assertj:assertj-core:3.15.0")
+    compile group: 'org.springframework', name: 'spring-context', version: '5.2.0.RELEASE'
+    testImplementation('org.junit.jupiter:junit-jupiter:5.6.0')
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
+    }
+}
