@@ -14,11 +14,11 @@ repositories {
 dependencies {
     compileOnly 'org.projectlombok:lombok:1.18.12'
     annotationProcessor 'org.projectlombok:lombok:1.18.12'
+    implementation("org.assertj:assertj-core:3.15.0")
 
     testCompileOnly 'org.projectlombok:lombok:1.18.12'
     testAnnotationProcessor 'org.projectlombok:lombok:1.18.12'
     testImplementation group: 'org.mockito', name: 'mockito-core', version: '2.1.0'
-    testImplementation("org.assertj:assertj-core:3.15.0")
     testImplementation('org.junit.jupiter:junit-jupiter:5.6.0')
 }
 
