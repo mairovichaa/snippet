@@ -1,6 +1,5 @@
 package com.amairovi.horstmann_java_se_9_for_the_impatient.chapter_8;
 
-import java.util.ArrayList;
 import java.util.DoubleSummaryStatistics;
 import java.util.stream.Stream;
 
