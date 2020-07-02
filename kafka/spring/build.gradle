@@ -1,0 +1,16 @@
+plugins {
+    id 'java'
+}
+
+group 'com.amairovi.kafka'
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile 'org.springframework.kafka:spring-kafka:2.2.8.RELEASE'
+}
