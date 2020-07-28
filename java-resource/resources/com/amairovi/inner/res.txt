@@ -1,0 +1,1 @@
+file at ./resources/com/amairovi/inner
