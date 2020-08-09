@@ -1,4 +1,5 @@
 plugins {
+    id "com.commercehub.gradle.plugin.avro" version "0.9.0"
     id 'java'
 }
 
@@ -9,8 +10,13 @@ sourceCompatibility = 1.8
 
 repositories {
     mavenCentral()
+    maven { url 'https://packages.confluent.io/maven/' }
 }
 
 dependencies {
+
+    implementation "org.apache.avro:avro:1.10.0"
+    implementation 'io.confluent:kafka-avro-serializer:5.0.4'
+    implementation 'org.slf4j:slf4j-simple:1.7.30'
     implementation 'org.apache.kafka:kafka-clients:2.5.0'
 }
