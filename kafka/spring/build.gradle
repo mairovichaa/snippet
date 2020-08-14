@@ -13,4 +13,5 @@ repositories {
 
 dependencies {
     compile 'org.springframework.kafka:spring-kafka:2.2.8.RELEASE'
+    compile group: 'org.slf4j', name: 'slf4j-simple', version: '1.7.30'
 }
