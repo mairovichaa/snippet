@@ -1,7 +1,5 @@
 package com.amairovi.horstmann_java_se_9_for_the_impatient.chapter_6;
 
-import javafx.util.Pair;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -33,4 +31,6 @@ public class Task21 {
 
     }
 
+    private static class Pair<T, T1> {
+    }
 }
