@@ -15,73 +15,45 @@ import static java.nio.file.FileVisitResult.CONTINUE;
 public class Task11 {
 
     @RequiredArgsConstructor
-    public static class Producer
-            extends SimpleFileVisitor<Path> {
-
-        private final Searcher searcher;
+    public static class Producer extends SimpleFileVisitor<Path> {
+        private final BlockingQueue<Path> queue;
 
         @Override
         public FileVisitResult visitFile(Path file, BasicFileAttributes attr) {
             if (attr.isRegularFile()) {
                 try {
-                    searcher.add(file);
+                    queue.put(file);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
             }
             return CONTINUE;
         }
-
-        public void finish() throws InterruptedException {
-            searcher.finish();
-        }
-    }
-
-    @RequiredArgsConstructor
-    private static class Searcher {
-        static Path FINISH = Paths.get("");
-
-        final Set<String> keyWords;
-        final BlockingQueue<Path> queue = new LinkedBlockingDeque<>();
-
-        public void add(Path path) throws InterruptedException {
-            queue.put(path);
-        }
-
-        public void finish() throws InterruptedException {
-            queue.put(FINISH);
-        }
-
-        public Path poll() throws InterruptedException {
-            return queue.take();
-        }
-
-
     }
 
     @RequiredArgsConstructor
     public static class Consumer implements Runnable {
-        private final Searcher searcher;
+        private final Set<String> keyWords;
+        private final Path FINISH;
+        private final BlockingQueue<Path> queue;
 
         @Override
         public void run() {
             while (true) {
                 try {
-                    Path path = searcher.poll();
+                    Path path = queue.take();
 
-                    if (path == Searcher.FINISH) {
+                    if (path == FINISH) {
                         return;
                     }
                     boolean match = Files.readAllLines(path)
                             .stream()
-                            .anyMatch(str -> searcher.keyWords.stream().anyMatch(str::contains));
+                            .anyMatch(str -> keyWords.stream().anyMatch(str::contains));
                     if (match) {
                         System.out.println(path);
                     }
 
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                } catch (IOException e) {
+                } catch (InterruptedException | IOException e) {
                     e.printStackTrace();
                 }
             }
@@ -89,21 +61,24 @@ public class Task11 {
     }
 
     public static void main(String[] args) throws IOException, InterruptedException {
-        HashSet<String> set = new HashSet<>();
-        set.add("DeadlockBetweenCooperating");
+        HashSet<String> keyWords = new HashSet<>();
+        keyWords.add("DeadlockBetweenCooperating");
 
+        BlockingQueue<Path> queue = new LinkedBlockingDeque<>();
+        Path poisonPill = Paths.get("");
 
-        Searcher searcher = new Searcher(set);
+        int availableProcessors = Runtime.getRuntime().availableProcessors();
 
-        for (int i = 0; i < Runtime.getRuntime().availableProcessors(); i++) {
-            new Thread(new Consumer(searcher)).start();
+        int amountOfConsumers = availableProcessors + 1;
+        for (int i = 0; i < amountOfConsumers; i++) {
+            new Thread(new Consumer(keyWords, poisonPill, queue)).start();
         }
 
-        Producer producer = new Producer(searcher);
-        Files.walkFileTree(Paths.get("E:\\projects\\snippets\\java-core\\src\\main\\java\\com\\amairovi"), producer);
+        Producer producer = new Producer(queue);
+        Files.walkFileTree(Paths.get("<path to folder>"), producer);
 
-        for (int i = 0; i < Runtime.getRuntime().availableProcessors(); i++) {
-            producer.finish();
+        for (int i = 0; i < amountOfConsumers; i++) {
+            queue.put(poisonPill);
         }
 
     }
