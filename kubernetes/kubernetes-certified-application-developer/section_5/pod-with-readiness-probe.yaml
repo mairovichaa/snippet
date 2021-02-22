@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: simple-webapp-2
+  labels:
+    name: simple-webapp-2
+spec:
+  containers:
+    - name: webapp-pod
+      imagePullPolicy: Always
+      image:  kodekloud/webapp-delayed-start
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: 8080

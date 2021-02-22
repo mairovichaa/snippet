@@ -1,0 +1,52 @@
+kubectl run  webapp-color  --image=kodekloud/webapp-color --labels="name=webapp-color"  --env="APP_COLOR=green"
+
+kubectl create configmap webapp-config-map --from-literal=APP_COLOR=darkblue
+
+
+kubectl create deployment blue --image=nginx --replicas=6
+
+
+---
+
+// secret
+
+kubectl create secret generic <secret-name> --from-literal=<key>=<value>
+kubectl create secret generic <secret-name> --from-file=<path-to-file>
+
+
+kubectl create secret generic db-secret --from-literal=DB_Host=sql01 --from-literal=DB_User=root --from-literal=DB_Password=password123
+
+kubectl explain pods --recursive | less
+
+kubectl get pod <pod-name> -o yaml > <filename>.yaml
+
+kubectl exec ubuntu-sleeper -- whoami
+
+kubectl exec ubuntu-sleeper -- date -s '19 APR 2012 11:14:00'
+
+--- 
+// service accounts
+
+kubectl create serviceaccount <servceaccount_name>
+kubectl get serviceaccount
+kubectl describe serviceaccount <servceaccount_name>
+
+---
+// taints
+
+// add taint
+kubectl taint nodes <node-name> <key>=<value>:<taint-effect>
+kubectl taint nodes node01 spray=mortein:NoSchedule
+
+// remove taint
+kubectl taint nodes <node-name> <key>=<value>:<taint-effect>-
+
+kubectl taint nodes master/controlplane node-role.kubernetes.io/master:NoSchedule-
+
+
+---
+// node labels
+
+kubectl label node <node-name> <label-key>=<label-value>
+kubectl label node node-1 size=Large
+kubectl label node node01 color=blue

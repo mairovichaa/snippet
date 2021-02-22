@@ -1,0 +1,39 @@
+kubectl create -f pod-definition.yml
+
+kubectl get pods
+
+kubectl describe pod myapp-pod
+
+
+// retrieve list of pods' names
+kubectl get pods | tail -n +2 | awk '{print $1}'
+
+
+// retrieve list of pods' names and pass them to the next command
+kubectl get pods | tail -n +2 | awk '{print $1}' | xargs kubectl describe pod | grep "Node:"
+
+
+// get result of the command locally (output to file pod.yaml in this case)
+kubectl run redis --image=redis123 --dry-run=client -o yaml > pod.yaml
+
+
+kubetcl get replicatset
+
+// delete replica set and all underlying PODs
+kubectl delete replicaset <replica-set-name>
+
+
+// scale 
+//by updating and applying file
+kubectl replace -f <replica-set-file>
+// directly with use of file
+kubectl scale --replicas=6 -f <replica-set-file>
+// directly with use of name
+kubectl scale --replicas=6 replicaset myapp-replicaset
+
+kubectl get all
+
+
+kubectl rollout status deplyment/<deployment name>
+kubectl rollout history deplyment/<deployment name>
+kubectl rollout undo deployment/<deployment name>
