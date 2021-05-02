@@ -1,0 +1,26 @@
+plugins {
+    id 'java'
+}
+
+group 'com.amairovi'
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation group: 'org.mockito', name: 'mockito-core', version: '2.1.0'
+    testImplementation('org.junit.jupiter:junit-jupiter:5.6.0')
+    testImplementation("org.assertj:assertj-core:3.15.0")
+}
+
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
+    }
+}

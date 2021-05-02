@@ -1,2 +1,3 @@
 rootProject.name = 'java-core'
 
+include 'entity-locker'
