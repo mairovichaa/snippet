@@ -1,7 +1,10 @@
 package com.amairovi;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -16,8 +19,18 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
     }
 
     @Override
+    public boolean lock(final T id, final long timeout, final TimeUnit unit) {
+        log.log(Level.FINE, "trying to lock " + id + " with timeout");
+        Instant shouldStopLockingAt = Instant.now().plus(unit.toNanos(timeout), ChronoUnit.NANOS);
+        return lock(id, shouldStopLockingAt);
+    }
+
+    @Override
     public void lock(final T id) {
-        // TODO replace with message supplier
+        lock(id, null);
+    }
+
+    private boolean lock(final T id, final Instant shouldStopLockingAt) {
         log.log(Level.FINE, "trying to lock " + id);
         while (true) {
             Boolean previous = locked.putIfAbsent(id, Boolean.TRUE);
@@ -25,10 +38,14 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
             if (previous == null) {
                 reentrancyHandler.increase(id);
                 log.log(Level.FINE, "lock for " + id + " is free");
-                return;
+                return true;
             } else {
                 if (reentrancyHandler.increaseIfPresent(id)) {
-                    return;
+                    return true;
+                }
+                if (shouldStopLockingAt != null && Instant.now().isAfter(shouldStopLockingAt)) {
+                    log.log(Level.FINE, "timeout has elapsed. Stop trying to lock " + id);
+                    return false;
                 }
                 log.log(Level.FINE, "lock for " + id + " is not free");
             }

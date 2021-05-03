@@ -5,6 +5,7 @@ import org.junit.jupiter.api.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.IntStream;
@@ -173,6 +174,35 @@ class DefaultEntityLockerTest {
         runInterruptibleSafely(future::get);
 
         assertThat(counter.get()).isEqualTo(3);
+    }
+
+    @Test
+    @Timeout(5)
+    void whenLockIsNotAcquiredBeforeTimeoutThenReturnFalse() throws ExecutionException, InterruptedException {
+        int id = 1;
+        locker.lock(id);
+        CompletableFuture<Boolean> lockFromAnotherThreadFuture = CompletableFuture.supplyAsync(
+                () -> locker.lock(id, 1, TimeUnit.SECONDS)
+        );
+        assertThat(lockFromAnotherThreadFuture.get()).isFalse();
+
+        locker.unlock(id);
+    }
+
+    @Test
+    @Timeout(5)
+    void whenLockIsAcquiredBeforeTimeoutThenReturnTrue() {
+        int id = 1;
+
+        CountDownLatch latch = new CountDownLatch(1);
+        CompletableFuture.runAsync(() -> {
+            locker.lock(id);
+            latch.countDown();
+            runInterruptibleSafely(() -> Thread.sleep(1000));
+            locker.unlock(id);
+        });
+
+        assertThat(locker.lock(1, 2, TimeUnit.SECONDS)).isTrue();
     }
 
     private void runInterruptibleSafely(final Interruptible interruptible) {
