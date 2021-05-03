@@ -3,12 +3,11 @@ package com.amairovi;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.IntStream;
@@ -22,7 +21,7 @@ class DefaultEntityLockerTest {
 
     @FunctionalInterface
     private interface Interruptible {
-        void run() throws InterruptedException;
+        void run() throws InterruptedException, ExecutionException;
     }
 
     @BeforeAll
@@ -38,6 +37,7 @@ class DefaultEntityLockerTest {
     }
 
     @RepeatedTest(100)
+    @Timeout(5)
     void whenThereAreSeveralThreadsForSameEntityThenAtMostOneIsAllowedToExecuteProtectedCode() {
         int amountOfThreads = 8;
         int amountOfOperations = 1000;
@@ -73,6 +73,48 @@ class DefaultEntityLockerTest {
     }
 
     @Test
+    @Timeout(10)
+    void whenThereAreSeveralEntitiesToLockBySameThreadThenLockThemExclusively() {
+        DefaultEntityLocker<Integer> locker = new DefaultEntityLocker<>();
+        int amountOfEntities = 8;
+
+        List<AtomicInteger> counters = new ArrayList<>(amountOfEntities);
+        List<CountDownLatch> latches = new ArrayList<>(amountOfEntities);
+        List<Future<?>> updateFromAnotherThreadFuture = new ArrayList<>(amountOfEntities);
+        ExecutorService executorService = Executors.newFixedThreadPool(amountOfEntities);
+
+        for (int i = 0; i < amountOfEntities; i++) {
+            Integer id = i;
+            AtomicInteger counter = new AtomicInteger();
+            counters.add(counter);
+            CountDownLatch latch = new CountDownLatch(1);
+            latches.add(latch);
+            locker.lock(id);
+
+            updateFromAnotherThreadFuture.add(
+                    executorService.submit(() -> {
+                        locker.lock(id);
+                        latch.countDown();
+                        counter.incrementAndGet();
+                        locker.unlock(id);
+                    })
+            );
+        }
+
+        for (int id = 0; id < amountOfEntities; id++) {
+            CountDownLatch latch = latches.get(id);
+            runInterruptibleSafely(() -> assertThat(latch.await(1, TimeUnit.SECONDS)).isFalse());
+            AtomicInteger counter = counters.get(id);
+            counter.incrementAndGet();
+            assertThat(counter.get()).isEqualTo(1);
+            locker.unlock(id);
+            runInterruptibleSafely(updateFromAnotherThreadFuture.get(id)::get);
+            assertThat(counter.get()).isEqualTo(2);
+        }
+    }
+
+    @Test
+    @Timeout(5)
     void whenThereAreDifferentEntitiesThenTheyCanBeLockedConcurrently() {
         DefaultEntityLocker<Integer> locker = new DefaultEntityLocker<>();
         int amountOfThreads = 8;
@@ -100,11 +142,45 @@ class DefaultEntityLockerTest {
         );
     }
 
+    @Test
+    @Timeout(5)
+    void whenReentrantLockTakesPlaceThenItShouldSucceed() {
+        DefaultEntityLocker<Integer> locker = new DefaultEntityLocker<>();
+        AtomicInteger counter = new AtomicInteger(0);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        Integer id = 1;
+        locker.lock(id);
+
+        locker.lock(id);
+        counter.incrementAndGet();
+        locker.unlock(id);
+        assertThat(counter.get()).isEqualTo(1);
+
+        CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+            locker.lock(id);
+            latch.countDown();
+            counter.incrementAndGet();
+            locker.unlock(id);
+        });
+
+        counter.incrementAndGet();
+        runInterruptibleSafely(() -> assertThat(latch.await(1, TimeUnit.SECONDS)).isFalse());
+        assertThat(counter.get()).isEqualTo(2);
+        locker.unlock(id);
+
+        runInterruptibleSafely(future::get);
+
+        assertThat(counter.get()).isEqualTo(3);
+    }
+
     private void runInterruptibleSafely(final Interruptible interruptible) {
         try {
             interruptible.run();
         } catch (InterruptedException e) {
             fail("Should not be interrupted", e);
+        } catch (ExecutionException e) {
+            fail("Should be executed successfully", e);
         }
     }
 
