@@ -1,9 +1,6 @@
 package com.amairovi;
 
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.RepeatedTest;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.*;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -18,6 +15,8 @@ import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.junit.jupiter.api.Assertions.fail;
 
 class DefaultEntityLockerTest {
+
+    private DefaultEntityLocker<Integer> locker;
 
     @FunctionalInterface
     private interface Interruptible {
@@ -36,6 +35,12 @@ class DefaultEntityLockerTest {
         Logger.getLogger("").setLevel(level);
     }
 
+    @BeforeEach
+    void beforeEach() {
+        ReentrancyHandler<Number> reentrancyHandler = new DefaultReentrancyHandler<>();
+        locker = new DefaultEntityLocker<>(reentrancyHandler);
+    }
+
     @RepeatedTest(100)
     @Timeout(5)
     void whenThereAreSeveralThreadsForSameEntityThenAtMostOneIsAllowedToExecuteProtectedCode() {
@@ -47,7 +52,6 @@ class DefaultEntityLockerTest {
         Map<Integer, Long> expectedResult = idsToIncrement.stream()
                 .collect(groupingBy(identity(), counting()));
 
-        DefaultEntityLocker<Integer> locker = new DefaultEntityLocker<>();
         ExecutorService executorService = Executors.newFixedThreadPool(amountOfThreads);
         Map<Integer, Long> actualResult = new ConcurrentHashMap<>();
         try {
@@ -73,10 +77,9 @@ class DefaultEntityLockerTest {
     }
 
     @Test
-    @Timeout(10)
+    @Timeout(5)
     void whenThereAreSeveralEntitiesToLockBySameThreadThenLockThemExclusively() {
-        DefaultEntityLocker<Integer> locker = new DefaultEntityLocker<>();
-        int amountOfEntities = 8;
+        int amountOfEntities = 3;
 
         List<AtomicInteger> counters = new ArrayList<>(amountOfEntities);
         List<CountDownLatch> latches = new ArrayList<>(amountOfEntities);
@@ -116,7 +119,6 @@ class DefaultEntityLockerTest {
     @Test
     @Timeout(5)
     void whenThereAreDifferentEntitiesThenTheyCanBeLockedConcurrently() {
-        DefaultEntityLocker<Integer> locker = new DefaultEntityLocker<>();
         int amountOfThreads = 8;
 
         CountDownLatch latch = new CountDownLatch(amountOfThreads);
@@ -145,7 +147,6 @@ class DefaultEntityLockerTest {
     @Test
     @Timeout(5)
     void whenReentrantLockTakesPlaceThenItShouldSucceed() {
-        DefaultEntityLocker<Integer> locker = new DefaultEntityLocker<>();
         AtomicInteger counter = new AtomicInteger(0);
 
         CountDownLatch latch = new CountDownLatch(1);

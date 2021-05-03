@@ -1,6 +1,5 @@
 package com.amairovi;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
@@ -9,23 +8,26 @@ import java.util.logging.Logger;
 public class DefaultEntityLocker<T> implements EntityLocker<T> {
     private final static Logger log = Logger.getLogger(DefaultEntityLocker.class.getName());
 
+    private final ReentrancyHandler<? super T> reentrancyHandler;
     private final Map<T, Boolean> locked = new ConcurrentHashMap<>();
-    private final ThreadLocal<Map<T, Integer>> reentrancyMap = ThreadLocal.withInitial(HashMap::new);
+
+    public DefaultEntityLocker(ReentrancyHandler<? super T> reentrancyHandler) {
+        this.reentrancyHandler = reentrancyHandler;
+    }
 
     @Override
     public void lock(final T id) {
+        // TODO replace with message supplier
         log.log(Level.FINE, "trying to lock " + id);
         while (true) {
             Boolean previous = locked.putIfAbsent(id, Boolean.TRUE);
 
             if (previous == null) {
-                reentrancyMap.get().put(id, 1);
+                reentrancyHandler.increase(id);
                 log.log(Level.FINE, "lock for " + id + " is free");
                 return;
             } else {
-                Integer amountOfLocks = reentrancyMap.get().get(id);
-                if (amountOfLocks != null) {
-                    reentrancyMap.get().put(id, amountOfLocks + 1);
+                if (reentrancyHandler.increaseIfPresent(id)) {
                     return;
                 }
                 log.log(Level.FINE, "lock for " + id + " is not free");
@@ -42,12 +44,8 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
             return;
         }
 
-        Integer amountOfLocks = reentrancyMap.get().get(id);
-        if (amountOfLocks == 1) {
-            reentrancyMap.get().remove(id);
+        if (reentrancyHandler.decrease(id) == 0) {
             locked.remove(id);
-        } else {
-            reentrancyMap.get().put(id, amountOfLocks - 1);
         }
     }
 }
