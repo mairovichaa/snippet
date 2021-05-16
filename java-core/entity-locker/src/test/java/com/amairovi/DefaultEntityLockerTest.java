@@ -16,7 +16,8 @@ import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.junit.jupiter.api.Assertions.fail;
 
 class DefaultEntityLockerTest {
-
+    private final int amountOfThreads = 16;
+    private ExecutorService executor;
     private DefaultEntityLocker<Integer> locker;
 
     @FunctionalInterface
@@ -36,16 +37,22 @@ class DefaultEntityLockerTest {
         Logger.getLogger("").setLevel(level);
     }
 
+
     @BeforeEach
     void beforeEach() {
         ReentrancyHandler<Number> reentrancyHandler = new DefaultReentrancyHandler<>();
         locker = new DefaultEntityLocker<>(reentrancyHandler);
+        executor = Executors.newFixedThreadPool(amountOfThreads);
+    }
+
+    @AfterEach
+    void afterEach() {
+        shutdownAndAwaitTermination(executor);
     }
 
     @RepeatedTest(100)
     @Timeout(5)
     void whenThereAreSeveralThreadsForSameEntityThenAtMostOneIsAllowedToExecuteProtectedCode() {
-        int amountOfThreads = 8;
         int amountOfOperations = 1000;
         List<Integer> idsToIncrement = new Random().ints(amountOfOperations, 0, amountOfThreads / 2)
                 .boxed()
@@ -53,7 +60,6 @@ class DefaultEntityLockerTest {
         Map<Integer, Long> expectedResult = idsToIncrement.stream()
                 .collect(groupingBy(identity(), counting()));
 
-        ExecutorService executorService = Executors.newFixedThreadPool(amountOfThreads);
         Map<Integer, Long> actualResult = new ConcurrentHashMap<>();
         try {
             List<Callable<Integer>> collect = idsToIncrement.stream()
@@ -65,13 +71,11 @@ class DefaultEntityLockerTest {
                     })
                     .collect(toList());
 
-            for (Future<Integer> future : executorService.invokeAll(collect)) {
+            for (Future<Integer> future : executor.invokeAll(collect)) {
                 future.get();
             }
         } catch (InterruptedException | ExecutionException e) {
             fail(e);
-        } finally {
-            shutdownAndAwaitTermination(executorService);
         }
 
         assertThat(actualResult).isEqualTo(expectedResult);
@@ -85,7 +89,6 @@ class DefaultEntityLockerTest {
         List<AtomicInteger> counters = new ArrayList<>(amountOfEntities);
         List<CountDownLatch> latches = new ArrayList<>(amountOfEntities);
         List<Future<?>> updateFromAnotherThreadFuture = new ArrayList<>(amountOfEntities);
-        ExecutorService executorService = Executors.newFixedThreadPool(amountOfEntities);
 
         for (int i = 0; i < amountOfEntities; i++) {
             Integer id = i;
@@ -96,7 +99,7 @@ class DefaultEntityLockerTest {
             locker.lock(id);
 
             updateFromAnotherThreadFuture.add(
-                    executorService.submit(() -> {
+                    executor.submit(() -> {
                         locker.lock(id);
                         latch.countDown();
                         counter.incrementAndGet();
@@ -120,26 +123,20 @@ class DefaultEntityLockerTest {
     @Test
     @Timeout(5)
     void whenThereAreDifferentEntitiesThenTheyCanBeLockedConcurrently() {
-        int amountOfThreads = 8;
-
         CountDownLatch latch = new CountDownLatch(amountOfThreads);
-        ExecutorService executorService = Executors.newFixedThreadPool(amountOfThreads);
-        try {
 
-            // amount of entities == amount of threads
-            // so each thread should count down once to proceed
-            IntStream.range(0, amountOfThreads)
-                    .mapToObj(id -> (Runnable) () -> {
-                        locker.lock(id);
-                        latch.countDown();
-                        runInterruptibleSafely(latch::await);
+        // amount of entities == amount of threads
+        // so each thread should count down once to proceed
+        IntStream.range(0, amountOfThreads)
+                .mapToObj(id -> (Runnable) () -> {
+                    locker.lock(id);
+                    latch.countDown();
+                    runInterruptibleSafely(latch::await);
 
-                        locker.unlock(id);
-                    })
-                    .forEach(executorService::submit);
-        } finally {
-            shutdownAndAwaitTermination(executorService);
-        }
+                    locker.unlock(id);
+                })
+                .forEach(executor::submit);
+
         runInterruptibleSafely(
                 () -> assertThat(latch.await(2, TimeUnit.SECONDS)).isTrue()
         );
@@ -159,7 +156,7 @@ class DefaultEntityLockerTest {
         locker.unlock(id);
         assertThat(counter.get()).isEqualTo(1);
 
-        CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+        Future<?> future = executor.submit(() -> {
             locker.lock(id);
             latch.countDown();
             counter.incrementAndGet();
@@ -181,7 +178,7 @@ class DefaultEntityLockerTest {
     void whenLockIsNotAcquiredBeforeTimeoutThenReturnFalse() throws ExecutionException, InterruptedException {
         int id = 1;
         locker.lock(id);
-        CompletableFuture<Boolean> lockFromAnotherThreadFuture = CompletableFuture.supplyAsync(
+        Future<Boolean> lockFromAnotherThreadFuture = executor.submit(
                 () -> locker.lock(id, 1, TimeUnit.SECONDS)
         );
         assertThat(lockFromAnotherThreadFuture.get()).isFalse();
@@ -195,7 +192,7 @@ class DefaultEntityLockerTest {
         int id = 1;
 
         CountDownLatch latch = new CountDownLatch(1);
-        CompletableFuture.runAsync(() -> {
+        executor.submit(() -> {
             locker.lock(id);
             latch.countDown();
             runInterruptibleSafely(() -> Thread.sleep(1000));
@@ -215,13 +212,13 @@ class DefaultEntityLockerTest {
         CyclicBarrier barrier = new CyclicBarrier(2);
 
         // when
-        CompletableFuture<Void> future1 = CompletableFuture.runAsync(() -> {
+        Future<?> future1 = executor.submit(() -> {
             locker.lock(id1);
             runInterruptibleSafely(barrier::await);
             locker.lock(id2);
         });
 
-        CompletableFuture<Void> future2 = CompletableFuture.runAsync(() -> {
+        Future<?> future2 = executor.submit(() -> {
             locker.lock(id2);
             runInterruptibleSafely(barrier::await);
             locker.lock(id1);
@@ -242,19 +239,16 @@ class DefaultEntityLockerTest {
     @Test
     @Timeout(5)
     void whenThereIsChainedDeadlockThenShouldThrowException() {
-        int amountOfThreads = 16;
-        List<Future<Void>> futures = new ArrayList<>();
+        List<Future<?>> futures = new ArrayList<>();
         CyclicBarrier barrier = new CyclicBarrier(amountOfThreads);
         for (int id = 0; id < amountOfThreads; id++) {
             Integer nextId = (id + 1) % amountOfThreads;
             Integer effectiveId = id;
-            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+            Future<?> future = executor.submit(() -> {
                 locker.lock(effectiveId);
                 runInterruptibleSafely(barrier::await);
                 locker.lock(nextId);
-                // TODO replace all CompletableFuture.runAsync with custom Executor
-                // TODO create a static variable for Executor
-            }, Executors.newFixedThreadPool(amountOfThreads));
+            });
             futures.add(future);
         }
 
@@ -283,7 +277,7 @@ class DefaultEntityLockerTest {
         actualResult.put(idToIncrement, val + 1);
     }
 
-    void shutdownAndAwaitTermination(ExecutorService pool) {
+    private void shutdownAndAwaitTermination(ExecutorService pool) {
         pool.shutdown();
         try {
             if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
