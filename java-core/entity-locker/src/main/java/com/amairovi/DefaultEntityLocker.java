@@ -12,10 +12,12 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
     private final static Logger log = Logger.getLogger(DefaultEntityLocker.class.getName());
 
     private final ReentrancyHandler<? super T> reentrancyHandler;
+    private final DeadlockDetector<? super T> deadLockDetector;
     private final Map<T, Boolean> locked = new ConcurrentHashMap<>();
 
     public DefaultEntityLocker(ReentrancyHandler<? super T> reentrancyHandler) {
         this.reentrancyHandler = reentrancyHandler;
+        deadLockDetector = new DefaultDeadlockDetector<>();
     }
 
     @Override
@@ -32,24 +34,37 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
 
     private boolean lock(final T id, final Instant shouldStopLockingAt) {
         log.log(Level.FINE, "trying to lock " + id);
+
+        deadLockDetector.addLockAcquiring(id, Thread.currentThread());
+
+        boolean result;
         while (true) {
             Boolean previous = locked.putIfAbsent(id, Boolean.TRUE);
 
             if (previous == null) {
                 reentrancyHandler.increase(id);
+                deadLockDetector.addLockOwning(id, Thread.currentThread());
                 log.log(Level.FINE, "lock for " + id + " is free");
-                return true;
+                result = true;
+                break;
             } else {
                 if (reentrancyHandler.increaseIfPresent(id)) {
-                    return true;
+                    result = true;
+                    break;
                 }
                 if (shouldStopLockingAt != null && Instant.now().isAfter(shouldStopLockingAt)) {
                     log.log(Level.FINE, "timeout has elapsed. Stop trying to lock " + id);
-                    return false;
+                    result = false;
+                    break;
                 }
                 log.log(Level.FINE, "lock for " + id + " is not free");
+
+                // TODO should we skip deadlock check if there is a timer?
+                deadLockDetector.check(id, Thread.currentThread());
             }
         }
+        deadLockDetector.removeLockAcquiring(id, Thread.currentThread());
+        return result;
     }
 
     @Override
@@ -62,6 +77,7 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
         }
 
         if (reentrancyHandler.decrease(id) == 0) {
+            deadLockDetector.removeLockOwning(id, Thread.currentThread());
             locked.remove(id);
         }
     }

@@ -5,13 +5,13 @@ import org.junit.jupiter.api.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.IntStream;
 
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.*;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -21,7 +21,7 @@ class DefaultEntityLockerTest {
 
     @FunctionalInterface
     private interface Interruptible {
-        void run() throws InterruptedException, ExecutionException;
+        void run() throws InterruptedException, ExecutionException, BrokenBarrierException;
     }
 
     @BeforeAll
@@ -205,6 +205,67 @@ class DefaultEntityLockerTest {
         assertThat(locker.lock(1, 2, TimeUnit.SECONDS)).isTrue();
     }
 
+    @Test
+    @Timeout(5)
+    void whenThereIsDeadlockThenShouldThrowExceptionKeepAlreadyAcquiredLocks() {
+        // given
+        int id1 = 1;
+        int id2 = 2;
+
+        CyclicBarrier barrier = new CyclicBarrier(2);
+
+        // when
+        CompletableFuture<Void> future1 = CompletableFuture.runAsync(() -> {
+            locker.lock(id1);
+            runInterruptibleSafely(barrier::await);
+            locker.lock(id2);
+        });
+
+        CompletableFuture<Void> future2 = CompletableFuture.runAsync(() -> {
+            locker.lock(id2);
+            runInterruptibleSafely(barrier::await);
+            locker.lock(id1);
+        });
+
+        // then
+        assertThatThrownBy(future1::get)
+                .isInstanceOf(ExecutionException.class)
+                .hasCauseInstanceOf(DeadlockDetectedException.class);
+
+        assertThatThrownBy(future2::get)
+                .isInstanceOf(ExecutionException.class)
+                .hasCauseInstanceOf(DeadlockDetectedException.class);
+        assertThat(locker.lock(id1, 100, TimeUnit.MILLISECONDS)).isFalse();
+        assertThat(locker.lock(id2, 100, TimeUnit.MILLISECONDS)).isFalse();
+    }
+
+    @Test
+    @Timeout(5)
+    void whenThereIsChainedDeadlockThenShouldThrowException() {
+        int amountOfThreads = 16;
+        List<Future<Void>> futures = new ArrayList<>();
+        CyclicBarrier barrier = new CyclicBarrier(amountOfThreads);
+        for (int id = 0; id < amountOfThreads; id++) {
+            Integer nextId = (id + 1) % amountOfThreads;
+            Integer effectiveId = id;
+            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                locker.lock(effectiveId);
+                runInterruptibleSafely(barrier::await);
+                locker.lock(nextId);
+                // TODO replace all CompletableFuture.runAsync with custom Executor
+                // TODO create a static variable for Executor
+            }, Executors.newFixedThreadPool(amountOfThreads));
+            futures.add(future);
+        }
+
+        for (int i = 0; i < amountOfThreads; i++) {
+            int id = i;
+            assertThatThrownBy(() -> futures.get(id).get())
+                    .isInstanceOf(ExecutionException.class)
+                    .hasCauseInstanceOf(DeadlockDetectedException.class);
+        }
+    }
+
     private void runInterruptibleSafely(final Interruptible interruptible) {
         try {
             interruptible.run();
@@ -212,6 +273,8 @@ class DefaultEntityLockerTest {
             fail("Should not be interrupted", e);
         } catch (ExecutionException e) {
             fail("Should be executed successfully", e);
+        } catch (BrokenBarrierException e) {
+            fail("Should not be broken", e);
         }
     }
 
