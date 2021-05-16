@@ -13,6 +13,7 @@ import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.*;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.fail;
 
 class DefaultEntityLockerTest {
@@ -204,7 +205,7 @@ class DefaultEntityLockerTest {
 
     @Test
     @Timeout(5)
-    void whenThereIsDeadlockThenShouldThrowExceptionKeepAlreadyAcquiredLocks() {
+    void whenThereIsDeadlockThenShouldThrowExceptionAndKeepAlreadyAcquiredLocks() {
         // given
         int id1 = 1;
         int id2 = 2;
@@ -232,6 +233,35 @@ class DefaultEntityLockerTest {
         assertThatThrownBy(future2::get)
                 .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(DeadlockDetectedException.class);
+        assertThat(locker.lock(id1, 100, TimeUnit.MILLISECONDS)).isFalse();
+        assertThat(locker.lock(id2, 100, TimeUnit.MILLISECONDS)).isFalse();
+    }
+
+    @Test
+    @Timeout(5)
+    void whenThereIsDeadlockAndLockWithTimeoutIsUsedThenShouldNotThrowException() {
+        // given
+        int id1 = 1;
+        int id2 = 2;
+
+        CyclicBarrier barrier = new CyclicBarrier(2);
+
+        // when
+        Future<?> future1 = executor.submit(() -> {
+            locker.lock(id1);
+            runInterruptibleSafely(barrier::await);
+            locker.lock(id2, 100, TimeUnit.MILLISECONDS);
+        });
+
+        Future<?> future2 = executor.submit(() -> {
+            locker.lock(id2);
+            runInterruptibleSafely(barrier::await);
+            locker.lock(id1, 100, TimeUnit.MILLISECONDS);
+        });
+
+        // then
+        assertDoesNotThrow(() -> future1.get());
+        assertDoesNotThrow(() -> future2.get());
         assertThat(locker.lock(id1, 100, TimeUnit.MILLISECONDS)).isFalse();
         assertThat(locker.lock(id2, 100, TimeUnit.MILLISECONDS)).isFalse();
     }

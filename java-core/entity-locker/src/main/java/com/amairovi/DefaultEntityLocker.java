@@ -59,8 +59,9 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
                 }
                 log.log(Level.FINE, "lock for " + id + " is not free");
 
-                // TODO should we skip deadlock check if there is a timer?
-                deadLockDetector.check(id, Thread.currentThread());
+                if (shouldStopLockingAt == null) {
+                    deadLockDetector.check(id, Thread.currentThread());
+                }
             }
         }
         deadLockDetector.removeLockAcquiring(id, Thread.currentThread());
