@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 class DefaultDeadlockDetectorTest {
 
@@ -37,6 +38,34 @@ class DefaultDeadlockDetectorTest {
 
         assertThatThrownBy(() -> underTest.check(id2, thread1))
                 .isInstanceOf(DeadlockDetectedException.class);
+    }
+
+    @Test
+    void whenThereIsDeadlockInvolvingGlobalLockThenShouldThrowException() {
+        Thread thread1 = new Thread();
+        Integer id1 = 1;
+        Thread thread2 = new Thread();
+        Integer id2 = 2;
+
+        underTest.addLockOwning(id1, thread1);
+        underTest.addLockOwning(id2, thread2);
+
+        underTest.addGlobalLockAcquiring(thread1);
+
+        assertThatThrownBy(() -> underTest.check(id1, thread2))
+                .isInstanceOf(DeadlockDetectedException.class);
+    }
+
+    @Test
+    void whenThereIsAGlobalLockAndOtherThreadDoesNotHaveAnyEntitiesAcquireThenShouldNotThrowException() {
+        Thread thread1 = new Thread();
+        Thread thread2 = new Thread();
+
+        Integer id1 = 1;
+        underTest.addLockOwning(id1, thread1);
+        underTest.addGlobalLockAcquiring(thread1);
+
+        assertDoesNotThrow(() -> underTest.check(id1, thread2));
     }
 
     @Test

@@ -10,4 +10,9 @@ public interface DeadlockDetector<T> {
     void addLockAcquiring(T id, Thread thread);
 
     void removeLockAcquiring(T id, Thread thread);
+
+    void addGlobalLockAcquiring(Thread thread);
+
+    void removeGlobalLockAcquiring(Thread thread);
+
 }

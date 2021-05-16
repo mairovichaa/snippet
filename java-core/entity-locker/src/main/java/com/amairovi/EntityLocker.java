@@ -8,4 +8,8 @@ public interface EntityLocker<T> {
     boolean lock(T id, long timeout, TimeUnit unit);
 
     void unlock(T id);
+
+    void lockGlobal();
+
+    void unlockGlobal();
 }
