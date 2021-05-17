@@ -8,7 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-class LockingData<T>{
+class LockingContext<T>{
     final Map<Thread, T> threadToEntityForWhichLockAcquiringInProcessIfAny = new ConcurrentHashMap<>();
     final Map<Thread, Set<T>> threadToOwnedEntities = new ConcurrentHashMap<>();
     final Map<T, Thread> acquiredEntityToOwnerThread = new ConcurrentHashMap<>();

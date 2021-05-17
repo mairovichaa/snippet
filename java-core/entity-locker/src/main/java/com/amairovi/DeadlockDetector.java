@@ -2,5 +2,5 @@ package com.amairovi;
 
 public interface DeadlockDetector<T> {
 
-    void check(T id, Thread thread, LockingData<? extends T> lockingData);
+    void check(T id, Thread thread, LockingContext<? extends T> context);
 }

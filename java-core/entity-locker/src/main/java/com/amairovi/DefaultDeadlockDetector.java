@@ -5,20 +5,20 @@ import java.util.Set;
 public class DefaultDeadlockDetector<T> implements DeadlockDetector<T> {
 
     @Override
-    public void check(T id, Thread thread, LockingData<? extends T> lockingData) {
-        if (!lockingData.threadToOwnedEntities.containsKey(thread)) {
+    public void check(T id, Thread thread, LockingContext<? extends T> context) {
+        if (!context.threadToOwnedEntities.containsKey(thread)) {
             return;
         }
 
-        Set<? extends T> entitiesOwnedByCurrentThread = lockingData.threadToOwnedEntities.get(thread);
-        Thread threadToCheck = lockingData.acquiredEntityToOwnerThread.get(id);
+        Set<? extends T> entitiesOwnedByCurrentThread = context.threadToOwnedEntities.get(thread);
+        Thread threadToCheck = context.acquiredEntityToOwnerThread.get(id);
         while (threadToCheck != null) {
-            T entityWhichThreadToCheckTriesToLock = lockingData.threadToEntityForWhichLockAcquiringInProcessIfAny.get(threadToCheck);
+            T entityWhichThreadToCheckTriesToLock = context.threadToEntityForWhichLockAcquiringInProcessIfAny.get(threadToCheck);
 
             // Needed entity has been acquired by threadToCheck, which currently tries to acquire global lock.
             // Current thread will wait for needed entity to be freed and threadToCheck will wait until current thread
             // frees all acquired locks => deadlock.
-            if (lockingData.threadsTryingToAcquireGlobalLock.contains(threadToCheck)) {
+            if (context.threadsTryingToAcquireGlobalLock.contains(threadToCheck)) {
                 // TODO: add info about deadlock (path)
                 throw new DeadlockDetectedException();
             }
@@ -37,7 +37,7 @@ public class DefaultDeadlockDetector<T> implements DeadlockDetector<T> {
                 throw new DeadlockDetectedException();
             }
 
-            threadToCheck = lockingData.acquiredEntityToOwnerThread.get(entityWhichThreadToCheckTriesToLock);
+            threadToCheck = context.acquiredEntityToOwnerThread.get(entityWhichThreadToCheckTriesToLock);
         }
     }
 
