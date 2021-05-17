@@ -1,4 +1,4 @@
-package com.amairovi;
+package com.amairovi.reentrancy;
 
 public interface ReentrancyHandler<T> {
 

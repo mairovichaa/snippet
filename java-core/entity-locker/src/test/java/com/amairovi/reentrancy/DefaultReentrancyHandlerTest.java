@@ -1,4 +1,4 @@
-package com.amairovi;
+package com.amairovi.reentrancy;
 
 import org.junit.jupiter.api.Test;
 

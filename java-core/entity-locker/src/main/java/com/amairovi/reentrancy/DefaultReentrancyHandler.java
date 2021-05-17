@@ -1,4 +1,6 @@
-package com.amairovi;
+package com.amairovi.reentrancy;
+
+import com.amairovi.NotThreadSafe;
 
 import java.util.HashMap;
 import java.util.Map;
