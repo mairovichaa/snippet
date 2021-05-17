@@ -3,6 +3,7 @@ package com.amairovi;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -24,9 +25,40 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
     private final LockingData<T> lockingData = new LockingData<>();
     private final GlobalLock globalLock = new GlobalLock();
 
-    public DefaultEntityLocker(ReentrancyHandler<? super T> reentrancyHandler) {
+    private DefaultEntityLocker(ReentrancyHandler<? super T> reentrancyHandler) {
         this.reentrancyHandler = reentrancyHandler;
         deadLockDetector = new DefaultDeadlockDetector<>();
+    }
+
+    public static <T> Builder<T> builder() {
+        return new Builder<>();
+    }
+
+    public static class Builder<T> {
+
+        private boolean reentrancy = true;
+        private ReentrancyHandler<? super T> reentrancyHandler = new DefaultReentrancyHandler<>();
+
+        public Builder<T> withReentrancy(boolean reentrancy) {
+            if (reentrancy) {
+                reentrancyHandler = new DefaultReentrancyHandler<>();
+            } else {
+                reentrancyHandler = new NoopReentrancyHandler<>();
+            }
+            return this;
+        }
+
+        public Builder<T> withReentrancyHandler(ReentrancyHandler<? super T> reentrancyHandler) {
+            Objects.requireNonNull(reentrancyHandler);
+            reentrancy = true;
+            this.reentrancyHandler = reentrancyHandler;
+            return this;
+        }
+
+        public DefaultEntityLocker<T> build() {
+            return new DefaultEntityLocker<>(reentrancyHandler);
+        }
+
     }
 
     @Override

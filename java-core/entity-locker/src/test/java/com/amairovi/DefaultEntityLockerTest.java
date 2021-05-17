@@ -46,7 +46,9 @@ class DefaultEntityLockerTest {
     @BeforeEach
     void beforeEach() {
         ReentrancyHandler<Number> reentrancyHandler = new DefaultReentrancyHandler<>();
-        locker = new DefaultEntityLocker<>(reentrancyHandler);
+        locker = DefaultEntityLocker.<Integer>builder()
+                .withReentrancyHandler(reentrancyHandler)
+                .build();
         executor = Executors.newFixedThreadPool(amountOfThreads);
     }
 
