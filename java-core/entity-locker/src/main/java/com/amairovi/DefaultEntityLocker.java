@@ -27,7 +27,6 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
     private volatile Thread threadWithGlobalLock;
     private final AtomicInteger globalLockReentrancy = new AtomicInteger();
     private final LockingData<T> lockingData = new LockingData<>();
-    private final GlobalLock globalLock = new GlobalLock();
 
     private DefaultEntityLocker(ReentrancyHandler<? super T> reentrancyHandler) {
         this.reentrancyHandler = reentrancyHandler;
