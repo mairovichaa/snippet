@@ -38,9 +38,9 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
         return new Builder<>();
     }
 
+    // TODO cover with tests different configuration
     public static class Builder<T> {
 
-        private boolean reentrancy = true;
         private ReentrancyHandler<? super T> reentrancyHandler = new DefaultReentrancyHandler<>();
 
         public Builder<T> withReentrancy(boolean reentrancy) {
@@ -54,7 +54,6 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
 
         public Builder<T> withReentrancyHandler(ReentrancyHandler<? super T> reentrancyHandler) {
             Objects.requireNonNull(reentrancyHandler);
-            reentrancy = true;
             this.reentrancyHandler = reentrancyHandler;
             return this;
         }
