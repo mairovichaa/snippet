@@ -34,6 +34,7 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
 
         private ReentrancyHandler<? super T> reentrancyHandler = new DefaultReentrancyHandler<>();
 
+        // TODO think about interaction with other configs, for example, lock detection
         public Builder<T> withReentrancy(boolean reentrancy) {
             if (reentrancy) {
                 reentrancyHandler = new DefaultReentrancyHandler<>();

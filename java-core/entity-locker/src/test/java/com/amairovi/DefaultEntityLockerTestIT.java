@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.fail;
 
 // TODO: add logging/comments in tests to improve its comprehensibility
-class DefaultEntityLockerTest {
+class DefaultEntityLockerTestIT {
     // should be greater than 4
     // otherwise, some of tests could fail due to absence of thread to run task within
     private final int amountOfThreads = 16;
