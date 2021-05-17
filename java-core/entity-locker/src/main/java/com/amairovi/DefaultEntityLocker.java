@@ -2,7 +2,7 @@ package com.amairovi;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -21,9 +21,8 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
     private final AtomicBoolean isGlobalLockAcquired = new AtomicBoolean(false);
     private volatile Thread threadWithGlobalLock;
     private final AtomicInteger globalLockReentrancy = new AtomicInteger();
-    private final Map<Thread, Set<T>> threadToOwnedEntities = new ConcurrentHashMap<>();
-    private final AtomicInteger totalAmountOfLocked = new AtomicInteger();
-    private final AtomicInteger totalAmountOfAcquiresInProcess = new AtomicInteger();
+    private final LockingData<T> lockingData = new LockingData<>();
+    private final GlobalLock globalLock = new GlobalLock();
 
     public DefaultEntityLocker(ReentrancyHandler<? super T> reentrancyHandler) {
         this.reentrancyHandler = reentrancyHandler;
@@ -32,7 +31,7 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
 
     @Override
     public boolean lock(final T id, final long timeout, final TimeUnit unit) {
-        log.log(Level.FINE, "trying to lock " + id + " with timeout");
+        log.log(Level.FINE, () -> "trying to lock " + id + " with timeout");
         Instant shouldStopLockingAt = Instant.now().plus(unit.toNanos(timeout), ChronoUnit.NANOS);
         return lock(id, shouldStopLockingAt);
     }
@@ -44,17 +43,15 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
     }
 
     private boolean lock(final T id, final Instant shouldStopLockingAt) {
-        log.log(Level.FINE, "trying to lock " + id);
+        log.log(Level.FINE, () -> "trying to lock " + id);
 
         if (threadWithGlobalLock != Thread.currentThread()) {
             while (isGlobalLockAcquired.get()) {
-                deadLockDetector.check(id, Thread.currentThread());
+                deadLockDetector.check(id, Thread.currentThread(), lockingData);
             }
         }
 
-        deadLockDetector.addLockAcquiring(id, Thread.currentThread());
-        totalAmountOfAcquiresInProcess.getAndIncrement();
-
+        lockingData.addLockAcquiring(id, Thread.currentThread());
         boolean result;
         try {
             while (true) {
@@ -62,9 +59,8 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
 
                 if (previous == null) {
                     reentrancyHandler.increase(id);
-                    addLockOwning(id, Thread.currentThread());
-                    deadLockDetector.addLockOwning(id, Thread.currentThread());
-                    log.log(Level.FINE, "lock for " + id + " is free");
+                    lockingData.addLockOwning(id, Thread.currentThread());
+                    log.log(Level.FINE, () -> "lock for " + id + " is free");
                     result = true;
                     break;
                 } else {
@@ -72,37 +68,41 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
                         result = true;
                         break;
                     }
-                    if (shouldStopLockingAt != null && Instant.now().isAfter(shouldStopLockingAt)) {
-                        log.log(Level.FINE, "timeout has elapsed. Stop trying to lock " + id);
+
+                    if (hasWaitingTimeElapsed(shouldStopLockingAt)) {
+                        log.log(Level.FINE, () -> "timeout has elapsed. Stop trying to lock " + id);
                         result = false;
                         break;
                     }
                     log.log(Level.FINE, "lock for " + id + " is not free");
 
                     if (shouldStopLockingAt == null) {
-                        deadLockDetector.check(id, Thread.currentThread());
+                        deadLockDetector.check(id, Thread.currentThread(), lockingData);
                     }
                 }
+
             }
         } finally {
-            totalAmountOfAcquiresInProcess.decrementAndGet();
-            deadLockDetector.removeLockAcquiring(id, Thread.currentThread());
+            lockingData.removeLockAcquiring(Thread.currentThread());
         }
         return result;
     }
 
+    private boolean hasWaitingTimeElapsed(Instant shouldStopLockingAt) {
+        return shouldStopLockingAt != null && Instant.now().isAfter(shouldStopLockingAt);
+    }
+
     @Override
     public void unlock(final T id) {
-        log.log(Level.FINE, "unlocking " + id);
+        log.log(Level.FINE, () -> "unlocking " + id);
         Boolean isLocked = locked.get(id);
         if (isLocked == null) {
-            log.log(Level.INFO, "trying to unlock not locked " + id);
+            log.log(Level.INFO, () -> "trying to unlock not locked " + id);
             return;
         }
 
         if (reentrancyHandler.decrease(id) == 0) {
-            deadLockDetector.removeLockOwning(id, Thread.currentThread());
-            removeLockOwning(id, Thread.currentThread());
+            lockingData.removeLockOwning(id, Thread.currentThread());
             locked.remove(id);
         }
     }
@@ -112,44 +112,58 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
         log.log(Level.FINE, "lock global");
 
         Thread currentThread = Thread.currentThread();
-        if (isGlobalLockAcquired.getAndSet(true)) {
-            if (threadWithGlobalLock == currentThread) {
-                log.log(Level.FINE, "global lock has been already acquired by this thread, increase reentrancy");
-                globalLockReentrancy.getAndIncrement();
-                return;
-            } else {
-                log.log(Level.FINE, "global lock has been already acquired by another thread");
-                if (threadToOwnedEntities.containsKey(currentThread)) {
-                    log.log(Level.FINE, "current thread owns some entities, " +
-                            "it means that global locking of the another thread still is in progress, " +
-                            "so there is a deadlock as neither current nor another thread " +
-                            "won't be able to acquire global lock");
-                    // TODO: add message about global deadlock
-                    throw new DeadlockDetectedException();
-                } else {
-                    while (isGlobalLockAcquired.getAndSet(true) && threadWithGlobalLock != currentThread) ;
-                }
-            }
+
+        if (threadWithGlobalLock == currentThread) {
+            log.log(Level.FINE, "global lock has been already acquired by this thread, increase reentrancy");
+            globalLockReentrancy.getAndIncrement();
+            return;
         }
-        log.log(Level.FINE, "global lock is marked as acquired");
 
-        deadLockDetector.addGlobalLockAcquiring(currentThread);
+        if (isGlobalLockAcquired.get()) {
+            log.log(Level.FINE, "global lock has been already acquired by another thread");
+            if (lockingData.threadToOwnedEntities.containsKey(currentThread)) {
+                log.log(Level.FINE, "current thread owns some entities, " +
+                        "it means that global locking of the another thread still is in progress, " +
+                        "so there is a deadlock as neither current nor another thread " +
+                        "won't be able to acquire global lock");
+                // TODO: add message about global deadlock
+                throw new DeadlockDetectedException();
+            }
 
-        while (totalAmountOfAcquiresInProcess.get() != 0);
+        }
 
+        acquireGlobalLock(currentThread);
+    }
+
+    private void waitUntilAllNonGlobalAcquiredLocksAreFreed(Thread currentThread) {
         while (true) {
-            int amountOfLockedByCurrentThread = threadToOwnedEntities.getOrDefault(currentThread, emptySet())
+            int amountOfLockedByCurrentThread = lockingData.threadToOwnedEntities.getOrDefault(currentThread, emptySet())
                     .size();
-            if (amountOfLockedByCurrentThread == totalAmountOfLocked.get()) {
+            if (amountOfLockedByCurrentThread == lockingData.totalAmountOfLocked.get()) {
                 break;
             }
         }
+    }
+
+    private void waitUntilAllNonGlobalLockAcquiringInProcessFinish() {
+        while (lockingData.totalAmountOfAcquiresInProcess.get() != 0) ;
+    }
+
+    private void acquireGlobalLock(Thread currentThread) {
+        while (isGlobalLockAcquired.getAndSet(true)) ;
+
+        log.log(Level.FINE, "global lock is marked as acquired");
+
+        lockingData.addGlobalLockAcquiring(currentThread);
+
+        waitUntilAllNonGlobalLockAcquiringInProcessFinish();
+        waitUntilAllNonGlobalAcquiredLocksAreFreed(currentThread);
 
         log.log(Level.FINE, "global lock is acquired");
         globalLockReentrancy.getAndIncrement();
         threadWithGlobalLock = currentThread;
 
-        deadLockDetector.removeGlobalLockAcquiring(Thread.currentThread());
+        lockingData.removeGlobalLockAcquiring(Thread.currentThread());
     }
 
     @Override
@@ -165,21 +179,5 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
             threadWithGlobalLock = null;
             isGlobalLockAcquired.set(false);
         }
-    }
-
-    private void addLockOwning(T id, Thread thread) {
-        totalAmountOfLocked.getAndIncrement();
-        if (threadToOwnedEntities.containsKey(thread)) {
-            threadToOwnedEntities.get(thread).add(id);
-        } else {
-            Set<T> acquiredEntities = new HashSet<>();
-            acquiredEntities.add(id);
-            threadToOwnedEntities.put(thread, acquiredEntities);
-        }
-    }
-
-    private void removeLockOwning(T id, Thread thread) {
-        totalAmountOfLocked.getAndDecrement();
-        threadToOwnedEntities.get(thread).remove(id);
     }
 }

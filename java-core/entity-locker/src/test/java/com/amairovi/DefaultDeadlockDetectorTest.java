@@ -18,9 +18,10 @@ class DefaultDeadlockDetectorTest {
         Integer id = 1;
         Thread thread2 = new Thread();
 
-        underTest.addLockOwning(id, thread1);
+        LockingData<Number> data = new LockingData<>();
+        data.addLockOwning(id, thread1);
 
-        underTest.check(id, thread2);
+        underTest.check(id, thread2, data);
     }
 
     @Test
@@ -30,13 +31,14 @@ class DefaultDeadlockDetectorTest {
         Thread thread2 = new Thread();
         Integer id2 = 2;
 
-        underTest.addLockOwning(id1, thread1);
-        underTest.addLockOwning(id2, thread2);
+        LockingData<Number> data = new LockingData<>();
+        data.addLockOwning(id1, thread1);
+        data.addLockOwning(id2, thread2);
 
-        underTest.addLockAcquiring(id1, thread2);
-        underTest.addLockAcquiring(id2, thread1);
+        data.addLockAcquiring(id1, thread2);
+        data.addLockAcquiring(id2, thread1);
 
-        assertThatThrownBy(() -> underTest.check(id2, thread1))
+        assertThatThrownBy(() -> underTest.check(id2, thread1, data))
                 .isInstanceOf(DeadlockDetectedException.class);
     }
 
@@ -47,12 +49,12 @@ class DefaultDeadlockDetectorTest {
         Thread thread2 = new Thread();
         Integer id2 = 2;
 
-        underTest.addLockOwning(id1, thread1);
-        underTest.addLockOwning(id2, thread2);
+        LockingData<Number> data = new LockingData<>();
+        data.addLockOwning(id1, thread1);
+        data.addLockOwning(id2, thread2);
+        data.addGlobalLockAcquiring(thread1);
 
-        underTest.addGlobalLockAcquiring(thread1);
-
-        assertThatThrownBy(() -> underTest.check(id1, thread2))
+        assertThatThrownBy(() -> underTest.check(id1, thread2,data))
                 .isInstanceOf(DeadlockDetectedException.class);
     }
 
@@ -62,10 +64,11 @@ class DefaultDeadlockDetectorTest {
         Thread thread2 = new Thread();
 
         Integer id1 = 1;
-        underTest.addLockOwning(id1, thread1);
-        underTest.addGlobalLockAcquiring(thread1);
+        LockingData<Number> data = new LockingData<>();
+        data.addLockOwning(id1, thread1);
+        data.addGlobalLockAcquiring(thread1);
 
-        assertDoesNotThrow(() -> underTest.check(id1, thread2));
+        assertDoesNotThrow(() -> underTest.check(id1, thread2, data));
     }
 
     @Test
@@ -77,15 +80,16 @@ class DefaultDeadlockDetectorTest {
         Integer id2 = 2;
         Integer id4 = 4;
 
-        underTest.addLockOwning(id1, thread1);
-        underTest.addLockOwning(id3, thread1);
-        underTest.addLockOwning(id2, thread2);
-        underTest.addLockOwning(id4, thread2);
+        LockingData<Number> data = new LockingData<>();
+        data.addLockOwning(id1, thread1);
+        data.addLockOwning(id3, thread1);
+        data.addLockOwning(id2, thread2);
+        data.addLockOwning(id4, thread2);
 
-        underTest.addLockAcquiring(id3, thread2);
-        underTest.addLockAcquiring(id2, thread1);
+        data.addLockAcquiring(id3, thread2);
+        data.addLockAcquiring(id2, thread1);
 
-        assertThatThrownBy(() -> underTest.check(id2, thread1))
+        assertThatThrownBy(() -> underTest.check(id2, thread1, data))
                 .isInstanceOf(DeadlockDetectedException.class);
     }
 
@@ -98,16 +102,17 @@ class DefaultDeadlockDetectorTest {
             threads.add(new Thread());
         }
 
+        LockingData<Number> data = new LockingData<>();
         for (int id = 0; id < amountOfThreads; id++) {
-            underTest.addLockOwning(id, threads.get(id));
+            data.addLockOwning(id, threads.get(id));
             Integer nextId = (id + 1) % amountOfThreads;
-            underTest.addLockAcquiring(nextId, threads.get(id));
+            data.addLockAcquiring(nextId, threads.get(id));
         }
 
         for (int i = 0; i < amountOfThreads; i++) {
             int id = i;
             Integer nextId = (id + 1) % amountOfThreads;
-            assertThatThrownBy(() -> underTest.check(nextId, threads.get(id)))
+            assertThatThrownBy(() -> underTest.check(nextId, threads.get(id), data))
                     .isInstanceOf(DeadlockDetectedException.class);
         }
     }
