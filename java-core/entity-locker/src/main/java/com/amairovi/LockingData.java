@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 class LockingData<T>{
@@ -14,6 +15,12 @@ class LockingData<T>{
     final Set<Thread> threadsTryingToAcquireGlobalLock = Collections.newSetFromMap(new ConcurrentHashMap<>());
     final AtomicInteger totalAmountOfLocked = new AtomicInteger();
     final AtomicInteger totalAmountOfAcquiresInProcess = new AtomicInteger();
+
+    final Map<T, Boolean> locked = new ConcurrentHashMap<>();
+    final AtomicBoolean isGlobalLockAcquired = new AtomicBoolean(false);
+    volatile Thread threadWithGlobalLock;
+    final AtomicInteger globalLockReentrancy = new AtomicInteger();
+
 
     public void addLockOwning(T id, Thread thread) {
         totalAmountOfLocked.getAndIncrement();

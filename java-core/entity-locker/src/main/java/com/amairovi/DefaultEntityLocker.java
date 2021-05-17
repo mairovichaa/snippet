@@ -22,10 +22,6 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
 
     private final ReentrancyHandler<? super T> reentrancyHandler;
     private final DeadlockDetector<? super T> deadLockDetector;
-    private final Map<T, Boolean> locked = new ConcurrentHashMap<>();
-    private final AtomicBoolean isGlobalLockAcquired = new AtomicBoolean(false);
-    private volatile Thread threadWithGlobalLock;
-    private final AtomicInteger globalLockReentrancy = new AtomicInteger();
     private final LockingData<T> lockingData = new LockingData<>();
 
     private DefaultEntityLocker(ReentrancyHandler<? super T> reentrancyHandler) {
@@ -79,8 +75,8 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
     private boolean lock(final T id, final Instant shouldStopLockingAt) {
         log.log(Level.FINE, () -> "trying to lock " + id);
 
-        if (threadWithGlobalLock != Thread.currentThread()) {
-            while (isGlobalLockAcquired.get()) {
+        if (lockingData.threadWithGlobalLock != Thread.currentThread()) {
+            while (lockingData.isGlobalLockAcquired.get()) {
                 deadLockDetector.check(id, Thread.currentThread(), lockingData);
             }
         }
@@ -89,7 +85,7 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
         boolean result;
         try {
             while (true) {
-                Boolean previous = locked.putIfAbsent(id, Boolean.TRUE);
+                Boolean previous = lockingData.locked.putIfAbsent(id, Boolean.TRUE);
 
                 if (previous == null) {
                     reentrancyHandler.increase(id);
@@ -129,7 +125,7 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
     @Override
     public void unlock(final T id) {
         log.log(Level.FINE, () -> "unlocking " + id);
-        Boolean isLocked = locked.get(id);
+        Boolean isLocked = lockingData.locked.get(id);
         if (isLocked == null) {
             log.log(Level.INFO, () -> "trying to unlock not locked " + id);
             return;
@@ -137,7 +133,7 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
 
         if (reentrancyHandler.decrease(id) == 0) {
             lockingData.removeLockOwning(id, Thread.currentThread());
-            locked.remove(id);
+            lockingData.locked.remove(id);
         }
     }
 
@@ -147,13 +143,13 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
 
         Thread currentThread = Thread.currentThread();
 
-        if (threadWithGlobalLock == currentThread) {
+        if (lockingData.threadWithGlobalLock == currentThread) {
             log.log(Level.FINE, "global lock has been already acquired by this thread, increase reentrancy");
-            globalLockReentrancy.getAndIncrement();
+            lockingData.globalLockReentrancy.getAndIncrement();
             return;
         }
 
-        if (isGlobalLockAcquired.get()) {
+        if (lockingData.isGlobalLockAcquired.get()) {
             log.log(Level.FINE, "global lock has been already acquired by another thread");
             if (lockingData.threadToOwnedEntities.containsKey(currentThread)) {
                 log.log(Level.FINE, "current thread owns some entities, " +
@@ -184,7 +180,7 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
     }
 
     private void acquireGlobalLock(Thread currentThread) {
-        while (isGlobalLockAcquired.getAndSet(true)) ;
+        while (lockingData.isGlobalLockAcquired.getAndSet(true)) ;
 
         log.log(Level.FINE, "global lock is marked as acquired");
 
@@ -194,8 +190,8 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
         waitUntilAllNonGlobalAcquiredLocksAreFreed(currentThread);
 
         log.log(Level.FINE, "global lock is acquired");
-        globalLockReentrancy.getAndIncrement();
-        threadWithGlobalLock = currentThread;
+        lockingData.globalLockReentrancy.getAndIncrement();
+        lockingData.threadWithGlobalLock = currentThread;
 
         lockingData.removeGlobalLockAcquiring(Thread.currentThread());
     }
@@ -203,15 +199,15 @@ public class DefaultEntityLocker<T> implements EntityLocker<T> {
     @Override
     public void unlockGlobal() {
         log.log(Level.FINE, "unlock global");
-        if (!isGlobalLockAcquired.get()) {
+        if (!lockingData.isGlobalLockAcquired.get()) {
             log.log(Level.INFO, "trying to unlock not locked global");
             return;
         }
 
-        if (globalLockReentrancy.decrementAndGet() == 0) {
+        if (lockingData.globalLockReentrancy.decrementAndGet() == 0) {
             log.log(Level.FINE, "free global lock");
-            threadWithGlobalLock = null;
-            isGlobalLockAcquired.set(false);
+            lockingData.threadWithGlobalLock = null;
+            lockingData.isGlobalLockAcquired.set(false);
         }
     }
 }
