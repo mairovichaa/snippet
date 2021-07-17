@@ -3,12 +3,12 @@ package com.amairovi.kafka.consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 public class Consumer {
 
@@ -31,9 +31,15 @@ public class Consumer {
                 ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(2000));
                 System.out.println(String.format("amount of records %d", records.count()));
                 for (ConsumerRecord<String, String> record : records) {
-                    System.out.println(String.format("topic = %s, partition = %d, offset %d, key = %s, value = %s",
-                            record.topic(), record.partition(), record.offset(), record.key(), record.value()));
+                    System.out.println("------");
+                    System.out.println("topic = " + record.topic());
+                    System.out.println("partition = " + record.partition());
+                    System.out.println("offset = " + record.offset());
+                    System.out.println("headers = " + Arrays.stream((record.headers().toArray())).map(h -> h.key() + ": " + new String(h.value())).collect(Collectors.joining(",", "{ ", " }")));
+                    System.out.println("key = " + record.key());
+                    System.out.println("value = " + record.value());
                 }
+                System.out.println();
             }
         } finally {
             consumer.close();
