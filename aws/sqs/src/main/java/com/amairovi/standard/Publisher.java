@@ -1,46 +1,45 @@
 package com.amairovi.standard;
 
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 import software.amazon.awssdk.services.sqs.model.SendMessageResponse;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
+
+import static com.amairovi.standard.Configs.REGION;
 
 public class Publisher {
 
-    private final String queueUrl = "";
+    private final String queueUrl = Configs.QUEUE_URL;
     private final SqsClient sqsClient = SqsClient.builder()
-            .region(Region.EU_CENTRAL_1)
-            .credentialsProvider(
-                    () -> AwsBasicCredentials.create("accessKeyId", "secretAccessKey"))
+            .region(REGION)
+            .credentialsProvider(Configs.INSTANCE)
             .build();
 
     public static void main(String[] args) {
         new Publisher().send();
-
     }
 
     public void send() {
-        long sum = 0;
-        int amountOfMessages = 10;
-        for (int i = 0; i < amountOfMessages; i++) {
-            SendMessageRequest sendMessageRequest = SendMessageRequest.builder()
-                    .messageBody("Message #" + i + "." + generateRandomString(50 * 1024))
-                    .queueUrl(queueUrl)
-                    .build();
-            long start = System.currentTimeMillis();
-            SendMessageResponse sendMessageResponse = sqsClient.sendMessage(sendMessageRequest);
-            long end = System.currentTimeMillis();
-//            System.out.println(sendMessageResponse);
-            final long tookTime = end - start;
-            System.out.println("It took " + tookTime + "ms. " + sendMessageResponse.messageId());
-            sum += tookTime;
-        }
+        Map<String, MessageAttributeValue> messageAttributes = new HashMap<>();
+        MessageAttributeValue messageAttributeValue = MessageAttributeValue.builder()
+                .dataType("String")
+                .stringValue("cause error").build();
+        messageAttributes.put("JMS_SQSMessageType", messageAttributeValue);
 
-        System.out.println("Average: " + (sum / amountOfMessages));
-
+        SendMessageRequest sendMessageRequest = SendMessageRequest.builder()
+                .messageBody("Message #1." + generateRandomString(1 * 1024))
+                .queueUrl(queueUrl)
+                .messageAttributes(messageAttributes)
+                .build();
+        long start = System.currentTimeMillis();
+        SendMessageResponse sendMessageResponse = sqsClient.sendMessage(sendMessageRequest);
+        long end = System.currentTimeMillis();
+        final long tookTime = end - start;
+        System.out.println("It took " + tookTime + "ms. " + sendMessageResponse.messageId());
     }
 
     private String generateRandomString(int size) {
