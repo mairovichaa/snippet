@@ -1,2 +1,4 @@
 rootProject.name = 'sqs'
 
+// https://github.com/awslabs/amazon-sqs-java-messaging-lib
+include 'amazon-jms'
