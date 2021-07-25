@@ -1,0 +1,9 @@
+apiVersion: v2
+name: test-chart
+version: 0.0.2
+description: simple chart for testing purpose
+type: application
+maintainers:
+  - name: Mairovich Andrey
+    email: mairovichaa@yandex.ru
+
