@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-world
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      type: demo
+      app: hello
+  template:
+    metadata:
+      labels:
+        type: demo
+        app: hello
+    spec:
+      containers:
+        - image: crccheck/hello-world
+          imagePullPolicy: Always
+          name: demo-app
