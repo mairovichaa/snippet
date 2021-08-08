@@ -1,0 +1,16 @@
+plugins {
+    id 'java'
+}
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation("org.mongodb:mongodb-driver-sync:4.2.3")
+    implementation("org.springframework.data:spring-data-mongodb:3.2.3")
+    implementation("org.slf4j:slf4j-api:1.7.31")
+    implementation("org.slf4j:slf4j-simple:1.7.31")
+}
