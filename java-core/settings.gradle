@@ -1,3 +1,4 @@
 rootProject.name = 'java-core'
 
 include 'entity-locker'
+include 'netty-in-action'
