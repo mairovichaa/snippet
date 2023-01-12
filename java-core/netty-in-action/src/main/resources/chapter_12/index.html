@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+
+
+<div style="width: 30%;min-width: 300px; float: left">
+    <p>Username:</p>
+    <input style="width: 100%;box-sizing: border-box" id="username" placeholder="name" value="<username>">
+    <p>Url to connect:</p>
+    <input style="width: 100%;box-sizing: border-box" id="wsSocketAddress" value="ws://localhost:8083/ws">
+    <button id="connectButton" style="width: 100%; margin-top: 10px" onclick="connectSocket()">Connect</button>
+    <textarea style="width: 100%;box-sizing: border-box;margin-top: 5px" cols="50" rows="30" id="receivedMessages"></textarea>
+</div>
+
+<div style="margin-left: 20px; float: left">
+    <p>Enter a message below to send</p>
+    <input id="message">
+    <button id="sendMessageButton" onclick="sendMessage()" disabled>Send</button>
+</div>
+
+<script>
+    let socket;
+
+    const wsSocketAddressInput = document.getElementById("wsSocketAddress");
+    const usernameInput = document.getElementById("username");
+    const sendMessageButton = document.getElementById("sendMessageButton");
+    const connectButton = document.getElementById("connectButton");
+
+    function enableMessageSending() {
+        sendMessageButton.disabled = false;
+    }
+
+    function disableMessageSending() {
+        sendMessageButton.disabled = true;
+    }
+
+    function enableConnection() {
+        connectButton.disabled = false;
+        wsSocketAddressInput.disabled = false;
+        usernameInput.disabled = false;
+    }
+
+    function disableConnection() {
+        connectButton.disabled = true;
+        wsSocketAddressInput.disabled = true;
+        usernameInput.disabled = true;
+    }
+
+    function connectSocket() {
+        let wsSocketAddress = wsSocketAddressInput.value;
+        let username = usernameInput.value;
+        console.log(`${wsSocketAddress} to connect with username '${username}'`);
+        let url = `${wsSocketAddress}?username=${username}`
+
+        console.log(`url = ${url}`);
+
+        socket = new WebSocket(url);
+
+        socket.onopen = function (e) {
+            console.log("[open] Connection established");
+
+            enableMessageSending();
+            disableConnection();
+        };
+
+        socket.onmessage = function (event) {
+            console.log(`[message] Data received from server: ${event.data}`);
+
+            let receivedMessages = document.getElementById("receivedMessages");
+            receivedMessages.value += "\n" + event.data;
+        };
+
+        socket.onclose = function (event) {
+            disableMessageSending();
+            enableConnection();
+            if (event.wasClean) {
+                console.log(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+            } else {
+                console.log('[close] Connection died');
+            }
+        };
+
+        socket.onerror = function (error) {
+            disableMessageSending();
+            enableConnection();
+            alert(`[error] ${error}`);
+        };
+    }
+
+    function sendMessage() {
+        let message = document.getElementById("message").value;
+        if (socket) {
+            console.log(`Send message ${message}`)
+            socket.send(message);
+            document.getElementById("message").value = "";
+        } else {
+            alert("Socket isn't connected");
+        }
+    }
+</script>
+</body>
+</html>

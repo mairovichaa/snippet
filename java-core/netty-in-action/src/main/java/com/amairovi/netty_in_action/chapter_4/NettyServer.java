@@ -35,6 +35,7 @@ public abstract class NettyServer {
                         }
                     });
             ChannelFuture f = b.bind().sync();
+            System.out.println("Port " + port + " is bound");
             f.channel().closeFuture().sync();
         } finally {
             group.shutdownGracefully().sync();
